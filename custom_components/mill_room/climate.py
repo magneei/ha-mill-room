@@ -215,7 +215,6 @@ class MillIndividualClimate(MillDeviceEntity, ClimateEntity):
 
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
-    _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_min_temp = 5.0
     _attr_max_temp = 35.0
     _attr_target_temperature_step = 0.5
@@ -226,6 +225,14 @@ class MillIndividualClimate(MillDeviceEntity, ClimateEntity):
         """Initialize individual climate entity."""
         super().__init__(coordinator, device_id)
         self._attr_unique_id = f"{DOMAIN}_{device_id}_climate"
+
+    @property
+    def supported_features(self) -> ClimateEntityFeature:
+        """Return supported features, omitting temp control if device has no setpoint."""
+        device = self.device_data
+        if device and device.set_temp is not None:
+            return ClimateEntityFeature.TARGET_TEMPERATURE
+        return ClimateEntityFeature(0)
 
     @property
     def name(self) -> str | None:
