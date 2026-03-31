@@ -12,3 +12,4 @@ MAX_BACKOFF_INTERVAL = 1800  # 30 minutes
 PRESET_COMFORT = "Comfort"
 PRESET_SLEEP = "Sleep"
 PRESET_AWAY = "Away"
+PRESET_PROGRAM = "Program"

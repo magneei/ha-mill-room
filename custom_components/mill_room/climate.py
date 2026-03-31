@@ -16,7 +16,7 @@ from homeassistant.components.climate import (
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
 from . import MillRoomConfigEntry
-from .const import DOMAIN, PRESET_AWAY, PRESET_COMFORT, PRESET_SLEEP
+from .const import DOMAIN, PRESET_AWAY, PRESET_COMFORT, PRESET_PROGRAM, PRESET_SLEEP
 from .coordinator import MillRoomCoordinator
 from .entity import MillDeviceEntity, MillRoomEntity
 
@@ -41,10 +41,15 @@ API_MODE_TO_PRESET = {
     "comfort": PRESET_COMFORT,
     "sleep": PRESET_SLEEP,
     "away": PRESET_AWAY,
+    "weekly_program": PRESET_PROGRAM,
 }
 
 # Maps our preset names to Mill API mode strings
-PRESET_TO_API_MODE = {v: k for k, v in API_MODE_TO_PRESET.items()}
+PRESET_TO_API_MODE = {
+    PRESET_COMFORT: "comfort",
+    PRESET_SLEEP: "sleep",
+    PRESET_AWAY: "away",
+}
 
 
 async def async_setup_entry(
@@ -73,7 +78,7 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.PRESET_MODE
     )
-    _attr_preset_modes = [PRESET_COMFORT, PRESET_SLEEP, PRESET_AWAY]
+    _attr_preset_modes = [PRESET_PROGRAM, PRESET_COMFORT, PRESET_SLEEP, PRESET_AWAY]
     _attr_min_temp = 5.0
     _attr_max_temp = 35.0
     _attr_target_temperature_step = 0.5
@@ -101,19 +106,23 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         if not room:
             return None
         preset = self.preset_mode
-        if preset:
-            key = PRESET_TO_TEMP_KEY.get(preset)
-            if key:
-                return getattr(room, key, None)
-        return room.comfort_temp
+        if preset == PRESET_PROGRAM:
+            # When following the program, use the house-level mode to
+            # determine which temp setpoint is currently active
+            house_mode = self.coordinator.data.house_modes.get(room.home_id)
+            house_preset = API_MODE_TO_PRESET.get(house_mode or "")
+            key = PRESET_TO_TEMP_KEY.get(house_preset or PRESET_COMFORT)
+            return getattr(room, key, room.comfort_temp) if key else room.comfort_temp
+        key = PRESET_TO_TEMP_KEY.get(preset or PRESET_COMFORT)
+        return getattr(room, key, None) if key else room.comfort_temp
 
     @property
     def preset_mode(self) -> str | None:
         """Return the current preset mode from the API."""
         room = self.room_data
         if not room or not room.active_mode:
-            return PRESET_COMFORT
-        return API_MODE_TO_PRESET.get(room.active_mode)
+            return PRESET_PROGRAM
+        return API_MODE_TO_PRESET.get(room.active_mode, PRESET_PROGRAM)
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -156,14 +165,30 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         if temperature is None:
             return
 
-        preset = self.preset_mode or PRESET_COMFORT
-        api_key = PRESET_TO_API_KEY[preset]
+        preset = self.preset_mode
+        if preset == PRESET_PROGRAM:
+            # When on program, figure out which setpoint the house mode maps to
+            room = self.room_data
+            house_mode = self.coordinator.data.house_modes.get(
+                room.home_id if room else ""
+            )
+            house_preset = API_MODE_TO_PRESET.get(house_mode or "", PRESET_COMFORT)
+            api_key = PRESET_TO_API_KEY.get(house_preset, "comfort_temp")
+        else:
+            api_key = PRESET_TO_API_KEY.get(preset or PRESET_COMFORT, "comfort_temp")
+
         await self.coordinator.async_set_room_temperatures(
             self._room_id, **{api_key: temperature}
         )
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        """Set the preset mode via room override API."""
+        """Set the preset mode via room override API, or clear override for Program."""
+        if preset_mode == PRESET_PROGRAM:
+            await self.coordinator.async_clear_room_mode_override(
+                self._room_id
+            )
+            return
+
         api_mode = PRESET_TO_API_MODE.get(preset_mode)
         if not api_mode:
             _LOGGER.warning("Unknown preset mode: %s", preset_mode)
@@ -179,9 +204,9 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
                 self._room_id, "off"
             )
         elif hvac_mode == HVACMode.HEAT:
-            # Turning on: set to comfort mode (or clear override to resume program)
-            await self.coordinator.async_set_room_mode_override(
-                self._room_id, "comfort"
+            # Turning on: clear any override to resume the program
+            await self.coordinator.async_clear_room_mode_override(
+                self._room_id
             )
 
 
