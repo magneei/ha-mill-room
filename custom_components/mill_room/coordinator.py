@@ -196,17 +196,11 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
     async def async_heater_control(
         self, device_id: str, power_status: bool
     ) -> None:
-        """Control a heater/socket power status.
-
-        Tries setting operation_mode directly first. If the API returns
-        409 (device is on a program), falls back to overriding the
-        weekly program instead.
-        """
+        """Control a heater/socket power status."""
         device = self.mill.devices.get(device_id)
         if not device:
             return
 
-        # Sockets support always_on/always_off via additional_socket_mode
         if isinstance(device, Socket):
             socket_mode = "always_on" if power_status else "always_off"
             payload = {
@@ -214,12 +208,13 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
                 "enabled": True,
                 "settings": {
                     "additional_socket_mode": socket_mode,
+                    "operation_mode": "control_individually",
                 },
             }
         else:
             payload = {
                 "deviceType": device.device_type,
-                "enabled": power_status,
+                "enabled": True,
                 "settings": {
                     "operation_mode": (
                         "control_individually" if power_status else "off"

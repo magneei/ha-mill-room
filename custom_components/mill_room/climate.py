@@ -199,15 +199,20 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode."""
+        room = self.room_data
         if hvac_mode == HVACMode.OFF:
+            if room:
+                room.active_mode = "off"
             await self.coordinator.async_set_room_mode_override(
                 self._room_id, "off"
             )
         elif hvac_mode == HVACMode.HEAT:
-            # Turning on: clear any override to resume the program
+            if room:
+                room.active_mode = "comfort"
             await self.coordinator.async_clear_room_mode_override(
                 self._room_id
             )
+        self.async_write_ha_state()
 
 
 class MillIndividualClimate(MillDeviceEntity, ClimateEntity):
