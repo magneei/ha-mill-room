@@ -196,8 +196,29 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
     async def async_heater_control(
         self, device_id: str, power_status: bool
     ) -> None:
-        """Control a heater's power status."""
-        await self.mill.heater_control(device_id, power_status)
+        """Control a heater/socket power status."""
+        device = self.mill.devices.get(device_id)
+        if not device:
+            return
+
+        if power_status:
+            operation_mode = "control_individually"
+        else:
+            operation_mode = "off"
+
+        payload = {
+            "deviceType": device.device_type,
+            "enabled": power_status,
+            "settings": {
+                "operation_mode": operation_mode,
+            },
+        }
+        result = await self.mill.request(
+            f"devices/{device_id}/settings", payload, patch=True
+        )
+        if result is not None:
+            self.mill._cache.clear()
+            device.power_status = power_status
 
     async def async_set_heater_temp(
         self, device_id: str, temperature: float
