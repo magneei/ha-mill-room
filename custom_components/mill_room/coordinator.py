@@ -195,7 +195,11 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
         url = f"{API_ENDPOINT}rooms/{room_id}/mode/override"
         headers = self.mill._build_headers(include_auth=True)
         async with asyncio.timeout(self.mill._timeout):
-            await self.mill.websession.delete(url, headers=headers)
+            resp = await self.mill.websession.delete(url, headers=headers)
+            if resp.status != 200:
+                _LOGGER.warning(
+                    "Failed to clear room override for %s: %s", room_id, resp.status
+                )
         await asyncio.sleep(2)
         await self.async_request_refresh()
 
