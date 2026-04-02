@@ -108,6 +108,12 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
             if not isinstance(device, (Heater, Socket)):
                 continue
 
+            # The millheater library derives power_status from
+            # lastMetrics.powerStatus, which can be stale. The top-level
+            # "isEnabled" field is the source of truth.
+            if device.data and device.data.get("isEnabled") is False:
+                device.power_status = False
+
             data.devices[device_id] = device
 
             if device.independent_device or not device.room_id:
