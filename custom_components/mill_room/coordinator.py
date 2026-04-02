@@ -201,26 +201,11 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
         if not device:
             return
 
-        if isinstance(device, Socket):
-            socket_mode = "always_on" if power_status else "always_off"
-            payload = {
-                "deviceType": device.device_type,
-                "enabled": True,
-                "settings": {
-                    "additional_socket_mode": socket_mode,
-                    "operation_mode": "control_individually",
-                },
-            }
-        else:
-            payload = {
-                "deviceType": device.device_type,
-                "enabled": True,
-                "settings": {
-                    "operation_mode": (
-                        "control_individually" if power_status else "off"
-                    ),
-                },
-            }
+        payload = {
+            "deviceType": device.device_type,
+            "enabled": power_status,
+            "settings": {},
+        }
 
         result = await self.mill.request(
             f"devices/{device_id}/settings", payload, patch=True
