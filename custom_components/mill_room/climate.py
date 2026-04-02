@@ -16,7 +16,7 @@ from homeassistant.components.climate import (
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
 from . import MillRoomConfigEntry
-from .const import DOMAIN, PRESET_AWAY, PRESET_COMFORT, PRESET_PROGRAM, PRESET_SLEEP
+from .const import DOMAIN, PRESET_AWAY, PRESET_COMFORT, PRESET_OFF, PRESET_PROGRAM, PRESET_SLEEP
 from .coordinator import MillRoomCoordinator
 from .entity import MillDeviceEntity, MillRoomEntity
 
@@ -41,6 +41,7 @@ API_MODE_TO_PRESET = {
     "comfort": PRESET_COMFORT,
     "sleep": PRESET_SLEEP,
     "away": PRESET_AWAY,
+    "off": PRESET_OFF,
     "weekly_program": PRESET_PROGRAM,
 }
 
@@ -49,6 +50,7 @@ PRESET_TO_API_MODE = {
     PRESET_COMFORT: "comfort",
     PRESET_SLEEP: "sleep",
     PRESET_AWAY: "away",
+    PRESET_OFF: "off",
 }
 
 
@@ -78,7 +80,7 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.PRESET_MODE
     )
-    _attr_preset_modes = [PRESET_PROGRAM, PRESET_COMFORT, PRESET_SLEEP, PRESET_AWAY]
+    _attr_preset_modes = [PRESET_PROGRAM, PRESET_COMFORT, PRESET_SLEEP, PRESET_AWAY, PRESET_OFF]
     _attr_min_temp = 5.0
     _attr_max_temp = 35.0
     _attr_target_temperature_step = 0.5
@@ -106,6 +108,8 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         if not room:
             return None
         preset = self.preset_mode
+        if preset == PRESET_OFF:
+            return None
         if preset == PRESET_PROGRAM:
             # When following the program, use the house-level mode to
             # determine which temp setpoint is currently active
@@ -131,16 +135,10 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         if not room:
             return HVACMode.OFF
 
-        # If the active mode is "off", report OFF
         if room.active_mode == "off":
             return HVACMode.OFF
 
-        for device_id in room.device_ids:
-            device = self.coordinator.data.devices.get(device_id)
-            if device and device.power_status:
-                return HVACMode.HEAT
-
-        return HVACMode.OFF
+        return HVACMode.HEAT
 
     @property
     def hvac_action(self) -> HVACAction:
@@ -183,7 +181,10 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the preset mode via room override API, or clear override for Program."""
+        room = self.room_data
         if preset_mode == PRESET_PROGRAM:
+            if room:
+                room.active_mode = "weekly_program"
             await self.coordinator.async_clear_room_mode_override(
                 self._room_id
             )
@@ -193,25 +194,18 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         if not api_mode:
             _LOGGER.warning("Unknown preset mode: %s", preset_mode)
             return
+        if room:
+            room.active_mode = api_mode
         await self.coordinator.async_set_room_mode_override(
             self._room_id, api_mode
         )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set HVAC mode."""
-        room = self.room_data
         if hvac_mode == HVACMode.OFF:
-            if room:
-                room.active_mode = "off"
-            await self.coordinator.async_set_room_mode_override(
-                self._room_id, "off"
-            )
+            await self.async_set_preset_mode(PRESET_OFF)
         elif hvac_mode == HVACMode.HEAT:
-            if room:
-                room.active_mode = "comfort"
-            await self.coordinator.async_clear_room_mode_override(
-                self._room_id
-            )
+            await self.async_set_preset_mode(PRESET_PROGRAM)
         self.async_write_ha_state()
 
 
