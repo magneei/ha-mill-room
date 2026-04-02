@@ -185,6 +185,7 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         if preset_mode == PRESET_PROGRAM:
             if room:
                 room.active_mode = "weekly_program"
+            self.async_write_ha_state()
             await self.coordinator.async_clear_room_mode_override(
                 self._room_id
             )
@@ -196,6 +197,7 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
             return
         if room:
             room.active_mode = api_mode
+        self.async_write_ha_state()
         await self.coordinator.async_set_room_mode_override(
             self._room_id, api_mode
         )
@@ -206,7 +208,6 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
             await self.async_set_preset_mode(PRESET_OFF)
         elif hvac_mode == HVACMode.HEAT:
             await self.async_set_preset_mode(PRESET_PROGRAM)
-        self.async_write_ha_state()
 
 
 class MillIndividualClimate(MillDeviceEntity, ClimateEntity):
