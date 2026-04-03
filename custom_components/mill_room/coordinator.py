@@ -31,6 +31,7 @@ class RoomData:
     sleep_temp: float | None = None
     away_temp: float | None = None
     active_mode: str | None = None
+    active_program_mode: str | None = None
     override_mode_type: str | None = None
     device_ids: list[str] = field(default_factory=list)
 
@@ -141,6 +142,9 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
                     # The "mode" field is the effective mode for the room,
                     # whether from an override or the house program.
                     room.active_mode = device.room_data.get("mode")
+                    room.active_program_mode = device.room_data.get(
+                        "activeModeFromWeeklyProgram"
+                    )
 
                 if not room.active_mode:
                     room.active_mode = data.house_modes.get(device.home_id)

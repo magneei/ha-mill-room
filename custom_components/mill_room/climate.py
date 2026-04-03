@@ -111,12 +111,13 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         if preset == PRESET_OFF:
             return None
         if preset == PRESET_PROGRAM:
-            # When following the program, use the house-level mode to
-            # determine which temp setpoint is currently active
-            house_mode = self.coordinator.data.house_modes.get(room.home_id)
-            house_preset = API_MODE_TO_PRESET.get(house_mode or "")
-            key = PRESET_TO_TEMP_KEY.get(house_preset or PRESET_COMFORT)
-            return getattr(room, key, room.comfort_temp) if key else room.comfort_temp
+            # Show the temp for whichever mode the weekly program is
+            # currently running (comfort/sleep/away)
+            program_preset = API_MODE_TO_PRESET.get(
+                room.active_program_mode or "", PRESET_COMFORT
+            )
+            key = PRESET_TO_TEMP_KEY.get(program_preset, "comfort_temp")
+            return getattr(room, key, room.comfort_temp)
         key = PRESET_TO_TEMP_KEY.get(preset or PRESET_COMFORT)
         return getattr(room, key, None) if key else room.comfort_temp
 
@@ -165,13 +166,11 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
 
         preset = self.preset_mode
         if preset == PRESET_PROGRAM:
-            # When on program, figure out which setpoint the house mode maps to
             room = self.room_data
-            house_mode = self.coordinator.data.house_modes.get(
-                room.home_id if room else ""
+            program_preset = API_MODE_TO_PRESET.get(
+                room.active_program_mode or "" if room else "", PRESET_COMFORT
             )
-            house_preset = API_MODE_TO_PRESET.get(house_mode or "", PRESET_COMFORT)
-            api_key = PRESET_TO_API_KEY.get(house_preset, "comfort_temp")
+            api_key = PRESET_TO_API_KEY.get(program_preset, "comfort_temp")
         else:
             api_key = PRESET_TO_API_KEY.get(preset or PRESET_COMFORT, "comfort_temp")
 
