@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import logging
+from typing import Any
 
 from mill import API_ENDPOINT, Heater, Mill, Socket, TooManyRequestsError
 
@@ -33,6 +34,7 @@ class RoomData:
     active_mode: str | None = None
     active_program_mode: str | None = None
     override_mode_type: str | None = None
+    override_end: datetime | None = None
     device_ids: list[str] = field(default_factory=list)
 
 
@@ -139,6 +141,10 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
                     room.override_mode_type = device.room_data.get(
                         "overrideModeType"
                     )
+                    # Timed overrides ("not_continuous") carry an end time in Unix seconds.
+                    end = device.room_data.get("overrideEndDate")
+                    if room.override_mode_type == "not_continuous" and end:
+                        room.override_end = datetime.fromtimestamp(end, tz=timezone.utc)
                     # The "mode" field is the effective mode for the room,
                     # whether from an override or the house program.
                     room.active_mode = device.room_data.get("mode")
@@ -176,12 +182,17 @@ class MillRoomCoordinator(DataUpdateCoordinator[MillData]):
         self,
         room_id: str,
         mode: str,
+        until: datetime | None = None,
     ) -> None:
-        """Override the room mode (comfort/sleep/away/off etc)."""
-        payload = {
-            "mode": mode,
-            "overrideModeType": "continuous",
-        }
+        """Override the room mode (comfort/sleep/away/off etc).
+
+        Without ``until`` the override lasts until it is cleared. With ``until`` it is
+        a timed override: Mill shows the end time in its app and ends it by itself.
+        """
+        payload: dict[str, Any] = {"mode": mode, "overrideModeType": "continuous"}
+        if until is not None:
+            payload["overrideModeType"] = "not_continuous"
+            payload["overrideEndDate"] = int(until.timestamp())
         self.mill._cache.clear()
         await self.mill.request(
             f"rooms/{room_id}/mode/override", payload

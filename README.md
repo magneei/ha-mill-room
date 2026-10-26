@@ -49,6 +49,26 @@ Each Mill room appears as a climate entity. The preset mode (Comfort/Sleep/Away)
 
 Setting a preset in HA calls the Mill room override API (`POST /rooms/{roomId}/mode/override`), which overrides the house-level program for that specific room.
 
+### Timed overrides
+
+The service `mill_room.set_override` overrides a room's preset, optionally for a fixed time:
+
+```yaml
+action: mill_room.set_override
+target:
+  entity_id: climate.kjellerstue_climate
+data:
+  preset_mode: Comfort
+  duration: "04:00:00"
+```
+
+With `duration` this is the same timed override as in the Mill app (`overrideModeType: not_continuous` with
+`overrideEndDate`): the app shows the end time, and Mill returns the room to its program by itself, even if
+Home Assistant is down. Without `duration` the override lasts until the room is set back to Program.
+
+Each room entity exposes `override_type` (`timed`, `continuous` or empty) and `override_end` (ISO time for timed
+overrides), also for overrides set in the Mill app.
+
 ### Temperature control
 
 Setting the temperature adjusts the setpoint for the currently active preset. For example, if the room is in Comfort mode and you set 23°C, it updates the comfort temperature for that room.

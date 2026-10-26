@@ -1,0 +1,21 @@
+set_override:
+  target:
+    entity:
+      integration: mill_room
+      domain: climate
+  fields:
+    preset_mode:
+      required: true
+      example: Comfort
+      selector:
+        select:
+          options:
+            - Comfort
+            - Sleep
+            - Away
+            - "Off"
+    duration:
+      required: false
+      example: "04:00:00"
+      selector:
+        duration:

@@ -18,5 +18,21 @@
     "abort": {
       "already_configured": "This account is already configured."
     }
+  },
+  "services": {
+    "set_override": {
+      "name": "Set override",
+      "description": "Override the room preset. With a duration it is a timed override that the Mill app shows and ends by itself; without one it lasts until the room is set back to Program.",
+      "fields": {
+        "preset_mode": {
+          "name": "Preset",
+          "description": "Comfort, Sleep, Away or Off."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long the override lasts. Leave empty for an override without end time."
+        }
+      }
+    }
   }
 }

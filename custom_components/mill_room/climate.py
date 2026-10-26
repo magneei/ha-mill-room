@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import Any
 
 from mill import Heater
+import voluptuous as vol
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -14,6 +16,8 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.helpers import config_validation as cv, entity_platform
+from homeassistant.util import dt as dt_util
 
 from . import MillRoomConfigEntry
 from .const import DOMAIN, PRESET_AWAY, PRESET_COMFORT, PRESET_OFF, PRESET_PROGRAM, PRESET_SLEEP
@@ -21,6 +25,10 @@ from .coordinator import MillRoomCoordinator
 from .entity import MillDeviceEntity, MillRoomEntity
 
 _LOGGER = logging.getLogger(__name__)
+
+SERVICE_SET_OVERRIDE = "set_override"
+ATTR_PRESET_MODE = "preset_mode"
+ATTR_DURATION = "duration"
 
 # Maps our preset names to RoomData attribute names
 PRESET_TO_TEMP_KEY = {
@@ -69,6 +77,18 @@ async def async_setup_entry(
             entities.append(MillIndividualClimate(coordinator, device_id))
 
     async_add_entities(entities)
+
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        SERVICE_SET_OVERRIDE,
+        {
+            vol.Required(ATTR_PRESET_MODE): vol.In(
+                [PRESET_COMFORT, PRESET_SLEEP, PRESET_AWAY, PRESET_OFF]
+            ),
+            vol.Optional(ATTR_DURATION): cv.positive_time_period,
+        },
+        "async_set_override",
+    )
 
 
 class MillRoomClimate(MillRoomEntity, ClimateEntity):
@@ -128,6 +148,18 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         if not room or not room.active_mode:
             return PRESET_PROGRAM
         return API_MODE_TO_PRESET.get(room.active_mode, PRESET_PROGRAM)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose the room override: type (continuous/timed) and end time for timed ones."""
+        room = self.room_data
+        if not room or self.preset_mode == PRESET_PROGRAM:
+            return {"override_type": None, "override_end": None}
+        timed = room.override_mode_type == "not_continuous"
+        return {
+            "override_type": "timed" if timed else "continuous",
+            "override_end": room.override_end.isoformat() if timed and room.override_end else None,
+        }
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -199,6 +231,22 @@ class MillRoomClimate(MillRoomEntity, ClimateEntity):
         self.async_write_ha_state()
         await self.coordinator.async_set_room_mode_override(
             self._room_id, api_mode
+        )
+
+    async def async_set_override(
+        self, preset_mode: str, duration: timedelta | None = None
+    ) -> None:
+        """Override the room preset, for a duration (timed, shown in the Mill app) or until cleared."""
+        api_mode = PRESET_TO_API_MODE[preset_mode]
+        until = dt_util.utcnow() + duration if duration else None
+        room = self.room_data
+        if room:
+            room.active_mode = api_mode
+            room.override_mode_type = "not_continuous" if until else "continuous"
+            room.override_end = until
+        self.async_write_ha_state()
+        await self.coordinator.async_set_room_mode_override(
+            self._room_id, api_mode, until
         )
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
